@@ -24,35 +24,84 @@
         .user-message { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; }
         .assistant-message { background-color: #e9ecef; color: #333; align-self: flex-start; white-space: pre-wrap; }
         .error-message { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #ddd; background: #fff; }
+        .chat-actions { display: flex; gap: 10px; }
+        .chat-action-button { padding: 8px 16px; border: 1px solid #ccc; background-color: #f8f9fa; color: #333; border-radius: 5px; cursor: pointer; font-size: 0.9em; }
+        .chat-action-button:hover { background-color: #e9ecef; }
+        .chat-action-button.primary { background-color: #28a745; color: white; border-color: #28a745; }
+        .chat-action-button.primary:hover { background-color: #218838; }
         #chat-form { display: flex; padding: 20px; border-top: 1px solid #ddd; background: #fff; }
         #message-input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 1em; }
         #send-button { padding: 10px 20px; margin-left: 10px; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; font-size: 1em; }
         #send-button:disabled { background-color: #a0a0a0; }
+        .history-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; }
+        .history-modal.active { display: flex; justify-content: center; align-items: center; }
+        .history-content { background: white; padding: 30px; border-radius: 10px; max-width: 800px; max-height: 80vh; width: 90%; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .history-close { background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; }
+        .history-item { padding: 15px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+        .history-item:hover { background-color: #f8f9fa; }
+        .history-item.selected { background-color: #e7f3ff; border-color: #007bff; }
+        .history-item-header { font-weight: bold; color: #333; margin-bottom: 8px; }
+        .history-item-preview { color: #666; font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .history-item-time { color: #999; font-size: 0.8em; margin-top: 5px; }
+        .empty-history { text-align: center; color: #999; padding: 40px; }
     </style>
 </head>
 <body>
     <header>
         <h1>Remote Chat CLI</h1>
+        <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px;">
+            <button id="restart-server-button" style="padding: 8px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; cursor: pointer; display: none;">서버 재시작</button>
+            <button id="logout-button" style="padding: 8px 16px; background-color: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">로그아웃</button>
+        </div>
     </header>
     <main>
         <aside class="sidebar">
             <h2>Projects</h2>
-            <div id="project-list"></div>
+            <div id="project-list">
+                <button id="deselect-project-button" style="display: block; width: 100%; padding: 10px; margin-bottom: 8px; border: 1px solid #28a745; background-color: #f8f9fa; text-align: left; cursor: pointer; border-radius: 5px; font-size: 0.9em; color: #28a745;">
+                    📁 BASE_DIR에서 실행
+                </button>
+            </div>
             <div id="current-selection">
-                Selected Project: <strong id="selected-project-name">None</strong>
+                Selected Project: <strong id="selected-project-name">None (BASE_DIR에서 실행)</strong>
+            </div>
+            <div id="project-server-controls" style="margin-top: 15px; display: none;">
+                <button id="restart-project-server-button" class="chat-action-button" style="width: 100%; margin-top: 10px; padding: 8px; font-size: 0.9em;">프로젝트 서버 재시작</button>
+                <div id="project-server-status" style="margin-top: 10px; padding: 8px; background-color: #f8f9fa; border-radius: 5px; font-size: 0.85em; color: #666;"></div>
             </div>
             <div class="cli-selector">
                 <h2>CLI Tool</h2>
                 <label><input type="radio" name="cli" value="gemini" checked> Gemini</label>
                 <label><input type="radio" name="cli" value="claude"> Claude</label>
+                <label><input type="radio" name="cli" value="echo"> Echo (for Testing)</label>
             </div>
         </aside>
         <div class="chat-container">
+            <div class="chat-header">
+                <h2 style="margin: 0;">채팅</h2>
+                <div class="chat-actions">
+                    <button id="new-chat-button" class="chat-action-button primary">새로 채팅하기</button>
+                    <button id="history-button" class="chat-action-button">히스토리</button>
+                </div>
+            </div>
             <div id="chat-log"></div>
             <form id="chat-form">
-                <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off">
-                <button type="submit" id="send-button">Send</button>
+                <input type="text" id="message-input" placeholder="메시지를 입력하세요..." autocomplete="off">
+                <button type="submit" id="send-button">전송</button>
             </form>
+        </div>
+        
+        <!-- 히스토리 모달 -->
+        <div id="history-modal" class="history-modal">
+            <div class="history-content">
+                <div class="history-header">
+                    <h2 style="margin: 0;">대화 히스토리</h2>
+                    <button id="history-close" class="history-close">닫기</button>
+                </div>
+                <div id="history-list"></div>
+            </div>
         </div>
     </main>
 
@@ -66,26 +115,74 @@
             const sendButton = document.getElementById('send-button');
 
             let selectedProjectId = null;
+            let currentSessionId = null; // 현재 채팅 세션 ID
+            let isNewChat = true; // 새 채팅인지 여부
 
             // --- Core Functions ---
 
             const fetchProjects = async () => {
                 try {
                     const response = await fetch('/api/projects');
+                    if (response.status === 401 || response.status === 403) {
+                        window.location.href = '/login';
+                        return;
+                    }
                     if (!response.ok) throw new Error('Failed to fetch projects');
                     const projects = await response.json();
                     
+                    // BASE_DIR 선택 버튼은 유지하고 프로젝트 목록만 업데이트
+                    const deselectButton = document.getElementById('deselect-project-button');
                     projectList.innerHTML = '';
+                    projectList.appendChild(deselectButton);
+                    
                     projects.forEach(project => {
                         const button = document.createElement('button');
                         button.textContent = project.name;
+                        if (project.has_server) {
+                            button.textContent += ' 🖥️';
+                        }
                         button.dataset.projectId = project.id;
+                        button.dataset.hasServer = project.has_server || false;
+                        button.dataset.port = project.port || '';
                         button.addEventListener('click', () => selectProject(project.id));
                         projectList.appendChild(button);
                     });
                 } catch (error) {
                     console.error(error);
                     appendMessage('Failed to load projects. Please ensure the server is running and the base directory is correct.', 'error');
+                }
+            };
+
+            const deselectProject = async () => {
+                try {
+                    const response = await fetch('/api/select-project', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ projectId: null })
+                    });
+                    if (response.status === 401 || response.status === 403) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    if (!response.ok) throw new Error('Failed to deselect project');
+
+                    selectedProjectId = null;
+                    selectedProjectName.textContent = 'None (BASE_DIR에서 실행)';
+
+                    // Update button styles
+                    document.querySelectorAll('#project-list button').forEach(btn => {
+                        btn.classList.remove('selected');
+                    });
+                    document.getElementById('deselect-project-button').classList.add('selected');
+                    
+                    // 프로젝트 서버 컨트롤 숨기기
+                    document.getElementById('project-server-controls').style.display = 'none';
+                    
+                    // BASE_DIR 히스토리 로드
+                    await fetchHistory(null);
+                } catch (error) {
+                    console.error(error);
+                    appendMessage(`프로젝트 선택 해제 중 오류가 발생했습니다.`, 'error');
                 }
             };
 
@@ -96,6 +193,10 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ projectId })
                     });
+                    if (response.status === 401 || response.status === 403) {
+                        window.location.href = '/login';
+                        return;
+                    }
                     if (!response.ok) throw new Error('Failed to select project');
 
                     selectedProjectId = projectId;
@@ -105,6 +206,10 @@
                     document.querySelectorAll('#project-list button').forEach(btn => {
                         btn.classList.toggle('selected', btn.dataset.projectId === projectId);
                     });
+                    document.getElementById('deselect-project-button').classList.remove('selected');
+                    
+                    // 프로젝트 서버 상태 확인 및 컨트롤 표시
+                    await checkProjectServerStatus(projectId);
                     
                     await fetchHistory(projectId);
                 } catch (error) {
@@ -113,20 +218,115 @@
                 }
             };
 
-            const fetchHistory = async (projectId) => {
+            // --- Project Server Functions ---
+            const checkProjectServerStatus = async (projectId) => {
+                const controls = document.getElementById('project-server-controls');
+                const statusDiv = document.getElementById('project-server-status');
+                const restartButton = document.getElementById('restart-project-server-button');
+                
+                try {
+                    const response = await fetch(`/api/projects/${projectId}/server/status`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        if (data.has_server) {
+                            controls.style.display = 'block';
+                            
+                            let statusText = '서버 상태: ';
+                            if (data.port) {
+                                statusText += `포트 ${data.port} - `;
+                                statusText += data.port_in_use ? '실행 중 ✅' : '중지됨 ❌';
+                            } else {
+                                statusText += '포트 정보 없음';
+                            }
+                            
+                            statusDiv.textContent = statusText;
+                            
+                            // 관리자만 재시작 버튼 표시
+                            if (data.is_admin) {
+                                restartButton.style.display = 'block';
+                            } else {
+                                restartButton.style.display = 'none';
+                            }
+                        } else {
+                            controls.style.display = 'none';
+                        }
+                    } else {
+                        controls.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Project server status check error:', error);
+                    controls.style.display = 'none';
+                }
+            };
+
+            const handleRestartProjectServer = async () => {
+                if (!selectedProjectId) {
+                    alert('먼저 프로젝트를 선택해주세요.');
+                    return;
+                }
+                
+                if (!confirm(`프로젝트 '${selectedProjectId}'의 서버를 재시작하시겠습니까?`)) {
+                    return;
+                }
+                
+                const restartButton = document.getElementById('restart-project-server-button');
+                restartButton.disabled = true;
+                restartButton.textContent = '재시작 중...';
+                
+                try {
+                    const response = await fetch(`/api/projects/${selectedProjectId}/server/restart`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok && data.success) {
+                        alert(data.message + '\n' + (data.warning || ''));
+                        // 몇 초 후 상태 재확인
+                        setTimeout(() => {
+                            checkProjectServerStatus(selectedProjectId);
+                        }, 3000);
+                    } else {
+                        alert('서버 재시작 실패: ' + (data.error || '알 수 없는 오류'));
+                    }
+                } catch (error) {
+                    console.error('Restart error:', error);
+                    alert('서버 재시작 중 오류가 발생했습니다.');
+                } finally {
+                    restartButton.disabled = false;
+                    restartButton.textContent = '프로젝트 서버 재시작';
+                }
+            };
+
+            const fetchHistory = async (projectId, sessionId = null) => {
                 chatLog.innerHTML = ''; // Clear previous history
                 try {
-                    const response = await fetch(`/api/history?projectId=${projectId}`);
+                    let url = `/api/history?projectId=${projectId}`;
+                    if (sessionId) {
+                        url += `&sessionId=${sessionId}`;
+                    }
+                    const response = await fetch(url);
+                    if (response.status === 401 || response.status === 403) {
+                        window.location.href = '/login';
+                        return;
+                    }
                     if (!response.ok) throw new Error('Failed to fetch history');
                     const history = await response.json();
                     
-                    history.forEach(item => {
-                        appendMessage(item.user_message, 'user');
-                        appendMessage(item.assistant_message, 'assistant');
-                    });
+                    if (history.length > 0) {
+                        history.forEach(item => {
+                            appendMessage(item.user_message, 'user');
+                            appendMessage(item.assistant_message, 'assistant');
+                        });
+                    } else if (!sessionId) {
+                        // 히스토리가 없고 새 채팅이 아닐 때만 메시지 표시
+                        appendMessage('이전 대화 기록이 없습니다. 새로운 대화를 시작하세요.', 'assistant');
+                    }
                 } catch (error) {
                     console.error(error);
-                    appendMessage(`Could not load history for ${projectId}.`, 'error');
+                    appendMessage(`히스토리를 불러올 수 없습니다: ${error.message}`, 'error');
                 }
             };
 
@@ -135,8 +335,8 @@
                 const message = messageInput.value.trim();
                 const selectedCli = document.querySelector('input[name="cli"]:checked')?.value;
 
-                if (!selectedProjectId || !selectedCli) {
-                    alert('Please select a project and a CLI tool first.');
+                if (!selectedCli) {
+                    alert('CLI 도구를 선택해주세요.');
                     return;
                 }
                 if (!message) return;
@@ -146,23 +346,51 @@
                 sendButton.disabled = true;
 
                 try {
+                    const requestBody = {
+                        cli: selectedCli,
+                        message: message
+                    };
+                    
+                    // 프로젝트가 선택되어 있으면 추가 (없으면 BASE_DIR에서 실행)
+                    if (selectedProjectId) {
+                        requestBody.projectId = selectedProjectId;
+                    }
+                    
+                    // 새 채팅이면 sessionId를 null로, 아니면 현재 sessionId 사용
+                    if (isNewChat) {
+                        requestBody.newSession = true;
+                        isNewChat = false;
+                    } else if (currentSessionId) {
+                        requestBody.sessionId = currentSessionId;
+                    }
+
                     const response = await fetch('/api/query', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ projectId: selectedProjectId, cli: selectedCli, message })
+                        body: JSON.stringify(requestBody)
                     });
+
+                    if (response.status === 401 || response.status === 403) {
+                        window.location.href = '/login';
+                        return;
+                    }
 
                     const data = await response.json();
 
                     if (!response.ok) {
-                        throw new Error(data.error || 'Unknown error from server');
+                        throw new Error(data.error || '서버 오류가 발생했습니다.');
                     }
                     
                     appendMessage(data.assistant_message, 'assistant');
+                    
+                    // 세션 ID 업데이트
+                    if (data.sessionId) {
+                        currentSessionId = data.sessionId;
+                    }
 
                 } catch (error) {
                     console.error(error);
-                    appendMessage(`Error: ${error.message}`, 'error');
+                    appendMessage(`오류: ${error.message}`, 'error');
                 } finally {
                     sendButton.disabled = false;
                     messageInput.focus();
@@ -185,11 +413,178 @@
                 chatLog.scrollTop = chatLog.scrollHeight;
             };
 
+            // --- New Chat Function ---
+            const startNewChat = () => {
+                if (confirm('새로운 채팅을 시작하시겠습니까? 현재 대화 내용은 저장됩니다.')) {
+                    chatLog.innerHTML = '';
+                    currentSessionId = null;
+                    isNewChat = true;
+                    appendMessage('새로운 대화를 시작합니다. 무엇을 도와드릴까요?', 'assistant');
+                }
+            };
+
+            // --- History Functions ---
+            const showHistory = async () => {
+                // 프로젝트가 선택되지 않았으면 "__root__" 사용 (BASE_DIR)
+                const projectIdForHistory = selectedProjectId || "__root__";
+                
+                const modal = document.getElementById('history-modal');
+                const historyList = document.getElementById('history-list');
+                
+                modal.classList.add('active');
+                historyList.innerHTML = '<div style="text-align: center; padding: 20px;">로딩 중...</div>';
+                
+                try {
+                    const response = await fetch(`/api/history/sessions?projectId=${projectIdForHistory}`);
+                    if (response.status === 401 || response.status === 403) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    if (!response.ok) throw new Error('히스토리를 불러올 수 없습니다.');
+                    
+                    const sessions = await response.json();
+                    
+                    if (sessions.length === 0) {
+                        historyList.innerHTML = '<div class="empty-history">저장된 대화 기록이 없습니다.</div>';
+                        return;
+                    }
+                    
+                    historyList.innerHTML = '';
+                    sessions.forEach(session => {
+                        const item = document.createElement('div');
+                        item.className = 'history-item';
+                        item.dataset.sessionId = session.sessionId;
+                        
+                        const preview = session.firstMessage || '대화 내용 없음';
+                        const time = new Date(session.timestamp).toLocaleString('ko-KR');
+                        
+                        item.innerHTML = `
+                            <div class="history-item-header">세션 ${session.sessionId}</div>
+                            <div class="history-item-preview">${preview}</div>
+                            <div class="history-item-time">${time}</div>
+                        `;
+                        
+                        item.addEventListener('click', () => {
+                            loadHistorySession(session.sessionId);
+                        });
+                        
+                        historyList.appendChild(item);
+                    });
+                } catch (error) {
+                    console.error(error);
+                    historyList.innerHTML = `<div class="empty-history">오류: ${error.message}</div>`;
+                }
+            };
+
+            const loadHistorySession = async (sessionId) => {
+                // 프로젝트가 선택되지 않았으면 "__root__" 사용
+                const projectIdForHistory = selectedProjectId || "__root__";
+                
+                currentSessionId = sessionId;
+                isNewChat = false;
+                
+                await fetchHistory(projectIdForHistory, sessionId);
+                
+                // 모달 닫기
+                document.getElementById('history-modal').classList.remove('active');
+            };
+
+            const closeHistoryModal = () => {
+                document.getElementById('history-modal').classList.remove('active');
+            };
+
+            // --- Server Restart Function ---
+            const handleRestartServer = async () => {
+                if (!confirm('서버를 재시작하시겠습니까? 재시작 중에는 일시적으로 접속이 불가능합니다.')) {
+                    return;
+                }
+                
+                const restartButton = document.getElementById('restart-server-button');
+                restartButton.disabled = true;
+                restartButton.textContent = '재시작 중...';
+                
+                try {
+                    const response = await fetch('/api/server/restart', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok && data.success) {
+                        alert(data.message + '\n' + (data.warning || ''));
+                        // 몇 초 후 페이지 새로고침
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 3000);
+                    } else {
+                        alert('서버 재시작 실패: ' + (data.error || '알 수 없는 오류'));
+                        restartButton.disabled = false;
+                        restartButton.textContent = '서버 재시작';
+                    }
+                } catch (error) {
+                    console.error('Restart error:', error);
+                    alert('서버 재시작 중 오류가 발생했습니다.');
+                    restartButton.disabled = false;
+                    restartButton.textContent = '서버 재시작';
+                }
+            };
+
+            // --- Check Admin Status ---
+            const checkAdminStatus = async () => {
+                try {
+                    const response = await fetch('/api/auth/status');
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.is_admin) {
+                            document.getElementById('restart-server-button').style.display = 'block';
+                        }
+                    }
+                } catch (error) {
+                    console.error('Admin status check error:', error);
+                }
+            };
+
+            // --- Logout Function ---
+            const handleLogout = async () => {
+                try {
+                    const response = await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (response.ok) {
+                        window.location.href = '/login';
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    window.location.href = '/login';
+                }
+            };
+
             // --- Event Listeners ---
             chatForm.addEventListener('submit', handleFormSubmit);
+            document.getElementById('logout-button').addEventListener('click', handleLogout);
+            document.getElementById('restart-server-button').addEventListener('click', handleRestartServer);
+            document.getElementById('restart-project-server-button').addEventListener('click', handleRestartProjectServer);
+            document.getElementById('deselect-project-button').addEventListener('click', deselectProject);
+            document.getElementById('new-chat-button').addEventListener('click', startNewChat);
+            document.getElementById('history-button').addEventListener('click', showHistory);
+            document.getElementById('history-close').addEventListener('click', closeHistoryModal);
+            
+            // --- Initial Load ---
+            checkAdminStatus();
+            
+            // 모달 외부 클릭 시 닫기
+            document.getElementById('history-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'history-modal') {
+                    closeHistoryModal();
+                }
+            });
 
             // --- Initial Load ---
             fetchProjects();
+            // 초기 로드 시 BASE_DIR 히스토리 불러오기 (프로젝트 선택 안 함)
+            fetchHistory(null);
         });
     </script>
 </body>
