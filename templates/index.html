@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Chat CLI</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background-color: #f4f4f9; }
+        header { background-color: #fff; padding: 20px; border-bottom: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        h1, h2 { margin: 0; color: #333; }
+        h1 { font-size: 1.5em; }
+        h2 { font-size: 1.1em; margin-top: 15px; }
+        main { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 250px; background-color: #fdfdfd; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; }
+        .chat-container { flex: 1; display: flex; flex-direction: column; }
+        #project-list button { display: block; width: 100%; padding: 10px; margin-bottom: 8px; border: 1px solid #ccc; background-color: #f9f9f9; text-align: left; cursor: pointer; border-radius: 5px; font-size: 1em; }
+        #project-list button:hover { background-color: #e9e9e9; }
+        #project-list button.selected { background-color: #007bff; color: white; border-color: #007bff; font-weight: bold; }
+        #current-selection { margin-top: 20px; padding: 10px; background-color: #e9f5ff; border-radius: 5px; color: #333; }
+        .cli-selector { margin-top: 15px; }
+        .cli-selector label { margin-right: 15px; cursor: pointer; }
+        #chat-log { flex: 1; padding: 20px; overflow-y: auto; background-color: #fff; }
+        .message { margin-bottom: 15px; padding: 12px 18px; border-radius: 18px; max-width: 80%; line-height: 1.5; }
+        .user-message { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; }
+        .assistant-message { background-color: #e9ecef; color: #333; align-self: flex-start; white-space: pre-wrap; }
+        .error-message { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        #chat-form { display: flex; padding: 20px; border-top: 1px solid #ddd; background: #fff; }
+        #message-input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 1em; }
+        #send-button { padding: 10px 20px; margin-left: 10px; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; font-size: 1em; }
+        #send-button:disabled { background-color: #a0a0a0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Remote Chat CLI</h1>
+    </header>
+    <main>
+        <aside class="sidebar">
+            <h2>Projects</h2>
+            <div id="project-list"></div>
+            <div id="current-selection">
+                Selected Project: <strong id="selected-project-name">None</strong>
+            </div>
+            <div class="cli-selector">
+                <h2>CLI Tool</h2>
+                <label><input type="radio" name="cli" value="gemini" checked> Gemini</label>
+                <label><input type="radio" name="cli" value="claude"> Claude</label>
+            </div>
+        </aside>
+        <div class="chat-container">
+            <div id="chat-log"></div>
+            <form id="chat-form">
+                <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off">
+                <button type="submit" id="send-button">Send</button>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const projectList = document.getElementById('project-list');
+            const selectedProjectName = document.getElementById('selected-project-name');
+            const chatLog = document.getElementById('chat-log');
+            const chatForm = document.getElementById('chat-form');
+            const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
+
+            let selectedProjectId = null;
+
+            // --- Core Functions ---
+
+            const fetchProjects = async () => {
+                try {
+                    const response = await fetch('/api/projects');
+                    if (!response.ok) throw new Error('Failed to fetch projects');
+                    const projects = await response.json();
+                    
+                    projectList.innerHTML = '';
+                    projects.forEach(project => {
+                        const button = document.createElement('button');
+                        button.textContent = project.name;
+                        button.dataset.projectId = project.id;
+                        button.addEventListener('click', () => selectProject(project.id));
+                        projectList.appendChild(button);
+                    });
+                } catch (error) {
+                    console.error(error);
+                    appendMessage('Failed to load projects. Please ensure the server is running and the base directory is correct.', 'error');
+                }
+            };
+
+            const selectProject = async (projectId) => {
+                try {
+                    const response = await fetch('/api/select-project', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ projectId })
+                    });
+                    if (!response.ok) throw new Error('Failed to select project');
+
+                    selectedProjectId = projectId;
+                    selectedProjectName.textContent = projectId;
+
+                    // Update button styles
+                    document.querySelectorAll('#project-list button').forEach(btn => {
+                        btn.classList.toggle('selected', btn.dataset.projectId === projectId);
+                    });
+                    
+                    await fetchHistory(projectId);
+                } catch (error) {
+                    console.error(error);
+                    appendMessage(`Error selecting project ${projectId}.`, 'error');
+                }
+            };
+
+            const fetchHistory = async (projectId) => {
+                chatLog.innerHTML = ''; // Clear previous history
+                try {
+                    const response = await fetch(`/api/history?projectId=${projectId}`);
+                    if (!response.ok) throw new Error('Failed to fetch history');
+                    const history = await response.json();
+                    
+                    history.forEach(item => {
+                        appendMessage(item.user_message, 'user');
+                        appendMessage(item.assistant_message, 'assistant');
+                    });
+                } catch (error) {
+                    console.error(error);
+                    appendMessage(`Could not load history for ${projectId}.`, 'error');
+                }
+            };
+
+            const handleFormSubmit = async (event) => {
+                event.preventDefault();
+                const message = messageInput.value.trim();
+                const selectedCli = document.querySelector('input[name="cli"]:checked')?.value;
+
+                if (!selectedProjectId || !selectedCli) {
+                    alert('Please select a project and a CLI tool first.');
+                    return;
+                }
+                if (!message) return;
+
+                appendMessage(message, 'user');
+                messageInput.value = '';
+                sendButton.disabled = true;
+
+                try {
+                    const response = await fetch('/api/query', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ projectId: selectedProjectId, cli: selectedCli, message })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Unknown error from server');
+                    }
+                    
+                    appendMessage(data.assistant_message, 'assistant');
+
+                } catch (error) {
+                    console.error(error);
+                    appendMessage(`Error: ${error.message}`, 'error');
+                } finally {
+                    sendButton.disabled = false;
+                    messageInput.focus();
+                }
+            };
+
+            // --- Helper Functions ---
+
+            const appendMessage = (text, type) => {
+                const messageDiv = document.createElement('div');
+                messageDiv.textContent = text;
+                if (type === 'user') {
+                    messageDiv.className = 'message user-message';
+                } else if (type === 'assistant') {
+                    messageDiv.className = 'message assistant-message';
+                } else { // 'error'
+                    messageDiv.className = 'message error-message';
+                }
+                chatLog.appendChild(messageDiv);
+                chatLog.scrollTop = chatLog.scrollHeight;
+            };
+
+            // --- Event Listeners ---
+            chatForm.addEventListener('submit', handleFormSubmit);
+
+            // --- Initial Load ---
+            fetchProjects();
+        });
+    </script>
+</body>
+</html>
