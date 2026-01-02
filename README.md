@@ -103,3 +103,4 @@ A simple web-based UI to interact with command-line LLM tools (like Gemini, Clau
 
 ---
 This project was initiated with the help of an AI assistant.
+"# remoteChat-cli" 
