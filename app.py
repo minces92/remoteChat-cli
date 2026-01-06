@@ -12,6 +12,8 @@ import socket
 import threading
 import time
 import re
+from authlib.integrations.flask_client import OAuth
+import requests
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -79,9 +81,49 @@ def load_allowed_users():
 ALLOWED_USERS = load_allowed_users()  # username: hashed_password 딕셔너리
 MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', '5'))  # 최대 로그인 시도 횟수
 
+def load_allowed_oauth_users():
+    """환경 변수에서 허가된 OAuth 사용자 목록을 로드합니다."""
+    users_str = os.getenv('ALLOWED_OAUTH_USERS', '').strip()
+    if not users_str:
+        return []
+    return [u.strip() for u in users_str.split(',') if u.strip()]
+
+ALLOWED_OAUTH_USERS = load_allowed_oauth_users()
+
 app = Flask(__name__)
 # It is recommended to use a more secure and persistent secret key in a real environment.
 app.secret_key = os.urandom(24)
+
+# --- OAuth Setup ---
+oauth = OAuth(app)
+
+# Google OAuth 설정
+google_client_id = os.getenv('GOOGLE_CLIENT_ID')
+google_client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+if google_client_id and google_client_secret:
+    oauth.register(
+        name='google',
+        client_id=google_client_id,
+        client_secret=google_client_secret,
+        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+        client_kwargs={'scope': 'openid email profile'}
+    )
+
+# GitHub OAuth 설정
+github_client_id = os.getenv('GITHUB_CLIENT_ID')
+github_client_secret = os.getenv('GITHUB_CLIENT_SECRET')
+if github_client_id and github_client_secret:
+    oauth.register(
+        name='github',
+        client_id=github_client_id,
+        client_secret=github_client_secret,
+        access_token_url='https://github.com/login/oauth/access_token',
+        access_token_params=None,
+        authorize_url='https://github.com/login/oauth/authorize',
+        authorize_params=None,
+        api_base_url='https://api.github.com/',
+        client_kwargs={'scope': 'user:email'},
+    )
 
 # --- Login Attempt Tracking ---
 # 서버 메모리에 저장 (서버 재시작 시 초기화됨)
@@ -318,36 +360,61 @@ def get_projects():
     return projects
 
 def get_project_port(project_path):
-    """프로젝트 폴더에서 포트 정보를 찾습니다."""
-    # .env 파일에서 포트 확인
+    """
+    프로젝트 폴더에서 포트 정보를 찾습니다.
+    규칙:
+    1. .env 파일: SERVER_PORT=XXXX 또는 PORT=XXXX
+    2. app.py 파일: app.run(port=XXXX), PORT = XXXX, 또는 # @port: XXXX 주석
+    """
+    def read_file_safe(file_path):
+        for encoding in ['utf-8', 'cp949', 'latin-1']:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    return f.read()
+            except Exception:
+                continue
+        return None
+
+    # 1. .env 파일 확인
     env_file = os.path.join(project_path, '.env')
     if os.path.exists(env_file):
-        try:
-            from dotenv import dotenv_values
-            env_vars = dotenv_values(env_file)
-            port = env_vars.get('SERVER_PORT') or env_vars.get('PORT')
-            if port:
-                return int(port)
-        except Exception:
-            pass
-    
-    # app.py에서 포트 확인
+        content = read_file_safe(env_file)
+        if content:
+            # @port: XXXX 주석 확인
+            match = re.search(r'@port:\s*(\d+)', content)
+            if match:
+                return int(match.group(1))
+            
+            # 정규표현식으로 직접 찾기 (dotenv_values 대신)
+            match = re.search(r'(?:SERVER_PORT|PORT)\s*=\s*(\d+)', content)
+            if match:
+                return int(match.group(1))
+
+    # 2. app.py 파일 확인
     app_py = os.path.join(project_path, 'app.py')
     if os.path.exists(app_py):
-        try:
-            with open(app_py, 'r', encoding='utf-8') as f:
-                content = f.read()
-                # app.run(port=XXXX) 패턴 찾기
-                import re
-                match = re.search(r'app\.run\([^)]*port\s*=\s*(\d+)', content)
-                if match:
-                    return int(match.group(1))
-                # SERVER_PORT = XXXX 패턴 찾기
-                match = re.search(r'SERVER_PORT\s*=\s*int\([^)]*(\d+)', content)
-                if match:
-                    return int(match.group(1))
-        except Exception:
-            pass
+        content = read_file_safe(app_py)
+        if content:
+            # @port: XXXX 주석 확인 (가장 우선순위 높음)
+            match = re.search(r'@port:\s*(\d+)', content)
+            if match:
+                return int(match.group(1))
+            
+            # app.run(port=XXXX) 또는 app.run(..., port=XXXX, ...)
+            match = re.search(r'port\s*=\s*(\d+)', content)
+            if match:
+                return int(match.group(1))
+            
+            # SERVER_PORT = XXXX 또는 PORT = XXXX 패턴 찾기 (int() 감싸기 포함)
+            match = re.search(r'(?:SERVER_PORT|PORT)\s*=\s*(?:int\()?(\d+)', content)
+            if match:
+                return int(match.group(1))
+            
+            # 마지막 수단: 파일 전체에서 "port" 단어 근처의 숫자 찾기
+            # 예: "port": 5000, "port" : 5000 등
+            match = re.search(r'port["\']?\s*[:=]\s*(\d{4,5})', content, re.IGNORECASE)
+            if match:
+                return int(match.group(1))
     
     return None
 
@@ -366,17 +433,8 @@ def restart_project_server(project_id):
     if not os.path.exists(bat_file):
         return False, f"프로젝트 '{project_id}'에 서버 재시작 스크립트를 찾을 수 없습니다."
     
-    # 프로젝트의 포트 확인
-    port = get_project_port(project_path)
-    if port:
-        # 포트가 사용 중이면 프로세스 종료
-        if is_port_in_use(port):
-            print(f"Port {port} is in use. Killing process...")
-            kill_process_on_port(port)
-            time.sleep(1)
-    
     try:
-        # 배치 파일을 새 창에서 실행
+        # 배치 파일을 새 창에서 실행 (포트 기반 종료 없이 스크립트에 위임)
         subprocess.Popen(
             ['cmd', '/c', 'start', bat_file],
             cwd=project_path,
@@ -460,6 +518,77 @@ def api_logout():
     """로그아웃 API 엔드포인트"""
     session.clear()
     return jsonify({"success": True, "message": "로그아웃되었습니다."})
+
+# --- OAuth Routes ---
+
+@app.route('/login/google')
+def login_google():
+    """Google OAuth 로그인 시작"""
+    if not google_client_id:
+        return "Google OAuth가 설정되지 않았습니다.", 400
+    redirect_uri = url_for('auth_google', _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+@app.route('/auth/google/callback')
+def auth_google():
+    """Google OAuth 콜백 처리"""
+    try:
+        token = oauth.google.authorize_access_token()
+        user_info = token.get('userinfo')
+        if not user_info:
+            # OpenID Connect를 지원하지 않는 경우 직접 정보 요청
+            resp = oauth.google.get('https://www.googleapis.com/oauth2/v3/userinfo')
+            user_info = resp.json()
+        
+        email = user_info.get('email')
+        
+        if email in ALLOWED_OAUTH_USERS:
+            reset_login_attempts()
+            session['authenticated'] = True
+            session['username'] = email
+            session['oauth_provider'] = 'google'
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error=f"허가되지 않은 이메일입니다: {email}")
+    except Exception as e:
+        print(f"Google Auth Error: {e}")
+        return redirect(url_for('login'))
+
+@app.route('/login/github')
+def login_github():
+    """GitHub OAuth 로그인 시작"""
+    if not github_client_id:
+        return "GitHub OAuth가 설정되지 않았습니다.", 400
+    redirect_uri = url_for('auth_github', _external=True)
+    return oauth.github.authorize_redirect(redirect_uri)
+
+@app.route('/auth/github/callback')
+def auth_github():
+    """GitHub OAuth 콜백 처리"""
+    try:
+        token = oauth.github.authorize_access_token()
+        resp = oauth.github.get('user')
+        user_info = resp.json()
+        
+        # GitHub은 사용자명 또는 이메일로 확인 가능
+        username = user_info.get('login')
+        
+        # 이메일 확인 (비공개 이메일인 경우 추가 요청 필요할 수 있음)
+        email_resp = oauth.github.get('user/emails')
+        emails = email_resp.json()
+        primary_email = next((e['email'] for e in emails if e['primary']), None)
+        
+        if username in ALLOWED_OAUTH_USERS or primary_email in ALLOWED_OAUTH_USERS:
+            reset_login_attempts()
+            session['authenticated'] = True
+            session['username'] = username or primary_email
+            session['oauth_provider'] = 'github'
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error=f"허가되지 않은 사용자입니다: {username or primary_email}")
+    except Exception as e:
+        print(f"GitHub Auth Error: {e}")
+        return redirect(url_for('login'))
 
 @app.route('/api/auth/status', methods=['GET'])
 def api_auth_status():
@@ -594,6 +723,7 @@ def handle_query():
     project_id = data.get('projectId')  # None일 수 있음 (프로젝트 선택 안 함)
     cli_tool = data.get('cli')
     message = data.get('message')
+    model = data.get('model') # Gemini 모델 버전
     session_id = data.get('sessionId')
     new_session = data.get('newSession', False)
 
@@ -641,8 +771,11 @@ def handle_query():
         
         # Build the command with the full path
         if cli_tool == 'gemini':
-            # Example for Gemini: gemini-cli prompt "your message"
-            command = [command_path, "prompt", message]
+            # Example for Gemini: gemini --model gemini-1.5-flash prompt "your message"
+            command = [command_path]
+            if model:
+                command.extend(["--model", model])
+            command.extend(["prompt", message])
         elif cli_tool == 'claude':
             # Example for Claude: claude prompt "your message"
             command = [command_path, "prompt", message]

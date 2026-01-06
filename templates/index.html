@@ -1,89 +1,588 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Remote Chat CLI</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background-color: #f4f4f9; }
-        header { background-color: #fff; padding: 20px; border-bottom: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        h1, h2 { margin: 0; color: #333; }
-        h1 { font-size: 1.5em; }
-        h2 { font-size: 1.1em; margin-top: 15px; }
-        main { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 250px; background-color: #fdfdfd; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; }
-        .chat-container { flex: 1; display: flex; flex-direction: column; }
-        #project-list button { display: block; width: 100%; padding: 10px; margin-bottom: 8px; border: 1px solid #ccc; background-color: #f9f9f9; text-align: left; cursor: pointer; border-radius: 5px; font-size: 1em; }
-        #project-list button:hover { background-color: #e9e9e9; }
-        #project-list button.selected { background-color: #007bff; color: white; border-color: #007bff; font-weight: bold; }
-        #current-selection { margin-top: 20px; padding: 10px; background-color: #e9f5ff; border-radius: 5px; color: #333; }
-        .cli-selector { margin-top: 15px; }
-        .cli-selector label { margin-right: 15px; cursor: pointer; }
-        #chat-log { flex: 1; padding: 20px; overflow-y: auto; background-color: #fff; }
-        .message { margin-bottom: 15px; padding: 12px 18px; border-radius: 18px; max-width: 80%; line-height: 1.5; }
-        .user-message { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; }
-        .assistant-message { background-color: #e9ecef; color: #333; align-self: flex-start; white-space: pre-wrap; }
-        .error-message { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #ddd; background: #fff; }
-        .chat-actions { display: flex; gap: 10px; }
-        .chat-action-button { padding: 8px 16px; border: 1px solid #ccc; background-color: #f8f9fa; color: #333; border-radius: 5px; cursor: pointer; font-size: 0.9em; }
-        .chat-action-button:hover { background-color: #e9ecef; }
-        .chat-action-button.primary { background-color: #28a745; color: white; border-color: #28a745; }
-        .chat-action-button.primary:hover { background-color: #218838; }
-        #chat-form { display: flex; padding: 20px; border-top: 1px solid #ddd; background: #fff; }
-        #message-input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 1em; }
-        #send-button { padding: 10px 20px; margin-left: 10px; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; font-size: 1em; }
-        #send-button:disabled { background-color: #a0a0a0; }
-        .history-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; }
-        .history-modal.active { display: flex; justify-content: center; align-items: center; }
-        .history-content { background: white; padding: 30px; border-radius: 10px; max-width: 800px; max-height: 80vh; width: 90%; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
-        .history-close { background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; }
-        .history-item { padding: 15px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
-        .history-item:hover { background-color: #f8f9fa; }
-        .history-item.selected { background-color: #e7f3ff; border-color: #007bff; }
-        .history-item-header { font-weight: bold; color: #333; margin-bottom: 8px; }
-        .history-item-preview { color: #666; font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .history-item-time { color: #999; font-size: 0.8em; margin-top: 5px; }
-        .empty-history { text-align: center; color: #999; padding: 40px; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            background-color: #f4f4f9;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: #fff;
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        h1,
+        h2 {
+            margin: 0;
+            color: #333;
+        }
+
+        h1 {
+            font-size: 1.2em;
+        }
+
+        h2 {
+            font-size: 1.1em;
+            margin-top: 15px;
+        }
+
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .sidebar {
+            width: 300px;
+            background-color: #fdfdfd;
+            border-right: 1px solid #ddd;
+            padding: 20px;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+            min-height: 0;
+            /* Flexbox scroll fix */
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            transition: transform 0.3s ease;
+            min-height: 0;
+            /* Flexbox scroll fix */
+        }
+
+        #project-list button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: 1px solid #eee;
+            background-color: #fff;
+            text-align: left;
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 0.95em;
+            transition: all 0.2s;
+        }
+
+        #project-list button:hover {
+            background-color: #f0f7ff;
+            border-color: #007bff;
+        }
+
+        #project-list button.selected {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+        }
+
+        #current-selection {
+            margin-top: 20px;
+            padding: 12px;
+            background-color: #e9f5ff;
+            border-radius: 8px;
+            color: #0056b3;
+            font-size: 0.9em;
+        }
+
+        .cli-selector {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .cli-selector h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        .cli-selector label {
+            display: block;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-size: 0.95em;
+            color: #555;
+        }
+
+        .cli-selector input {
+            margin-right: 10px;
+        }
+
+        #chat-log {
+            flex: 1;
+            padding: 20px;
+            padding-bottom: 40px;
+            /* 여유 공간 추가 */
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            /* Flexbox scroll fix */
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 18px;
+            border-radius: 18px;
+            max-width: 85%;
+            line-height: 1.5;
+            font-size: 0.95em;
+            position: relative;
+        }
+
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
+        }
+
+        .assistant-message {
+            background-color: #fff;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+            border: 1px solid #eee;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.02);
+            white-space: pre-wrap;
+        }
+
+        .error-message {
+            background-color: #fff5f5;
+            color: #c53030;
+            border: 1px solid #feb2b2;
+            align-self: center;
+            max-width: 90%;
+            border-radius: 8px;
+        }
+
+        .cli-button {
+            display: inline-block;
+            margin: 5px;
+            padding: 8px 15px;
+            background-color: #e9ecef;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+
+        .cli-button:hover {
+            background-color: #dee2e6;
+            border-color: #ced4da;
+        }
+
+        /* Markdown Styles */
+        .assistant-message pre {
+            background-color: #f1f3f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        .assistant-message code {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f1f3f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .assistant-message p {
+            margin: 5px 0;
+        }
+
+        .chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            border-bottom: 1px solid #ddd;
+            background: #fff;
+            min-height: 60px;
+        }
+
+        .chat-title-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .chat-action-button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            background-color: #fff;
+            color: #555;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .chat-action-button:hover {
+            background-color: #f8f9fa;
+            border-color: #ccc;
+        }
+
+        .chat-action-button.primary {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .chat-action-button.primary:hover {
+            background-color: #0069d9;
+        }
+
+        .chat-action-button.warning {
+            background-color: #ffc107;
+            color: #333;
+            border-color: #ffc107;
+        }
+
+        .chat-action-button.warning:hover {
+            background-color: #e0a800;
+        }
+
+        #chat-form {
+            display: flex;
+            padding: 15px 20px;
+            border-top: 1px solid #ddd;
+            background: #fff;
+            gap: 10px;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #message-input:focus {
+            border-color: #007bff;
+        }
+
+        #send-button {
+            padding: 0 20px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        #send-button:hover {
+            background-color: #0069d9;
+        }
+
+        #send-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .mobile-nav {
+            display: none;
+            background: #fff;
+            border-top: 1px solid #ddd;
+            padding: 10px;
+            justify-content: space-around;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: #666;
+            cursor: pointer;
+            font-size: 0.75em;
+        }
+
+        .nav-item.active {
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        .nav-icon {
+            font-size: 1.4em;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: absolute;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                width: 100%;
+                z-index: 50;
+                border-right: none;
+                transform: translateX(-100%);
+                background: #fff;
+            }
+
+            .sidebar.active {
+                transform: translateX(0);
+            }
+
+            .chat-container {
+                width: 100%;
+                display: none;
+            }
+
+            .chat-container.active {
+                display: flex;
+            }
+
+            .mobile-nav {
+                display: flex;
+            }
+
+            header h1 {
+                font-size: 1.1em;
+            }
+
+            .chat-header {
+                padding: 10px 15px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .chat-actions {
+                width: 100%;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+
+            .chat-action-button {
+                padding: 6px 10px;
+                font-size: 0.7em;
+                flex: 1;
+                justify-content: center;
+                min-width: 80px;
+            }
+
+            .message {
+                max-width: 90%;
+            }
+        }
+
+        .history-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            backdrop-filter: blur(3px);
+        }
+
+        .history-modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .history-content {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            max-width: 600px;
+            max-height: 85vh;
+            width: 95%;
+            overflow-y: auto;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .history-close {
+            background: #f8f9fa;
+            color: #333;
+            border: 1px solid #ddd;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .history-item {
+            padding: 15px;
+            margin-bottom: 12px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            background-color: #f0f7ff;
+            border-color: #007bff;
+        }
+
+        .history-item.selected {
+            background-color: #e7f3ff;
+            border-color: #007bff;
+        }
+
+        .history-item-header {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 0.95em;
+        }
+
+        .history-item-preview {
+            color: #666;
+            font-size: 0.85em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item-time {
+            color: #999;
+            font-size: 0.75em;
+            margin-top: 8px;
+        }
+
+        .empty-history {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+            font-style: italic;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .status-online {
+            background-color: #e6fffa;
+            color: #2c7a7b;
+        }
+
+        .status-offline {
+            background-color: #fff5f5;
+            color: #c53030;
+        }
     </style>
 </head>
+
 <body>
     <header>
         <h1>Remote Chat CLI</h1>
-        <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px;">
-            <button id="restart-server-button" style="padding: 8px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; cursor: pointer; display: none;">서버 재시작</button>
-            <button id="logout-button" style="padding: 8px 16px; background-color: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">로그아웃</button>
+        <div style="display: flex; gap: 10px;">
+            <button id="restart-server-button" class="chat-action-button warning" style="display: none;">⚙️ 서버
+                재시작</button>
+            <button id="logout-button" class="chat-action-button"
+                style="background-color: #dc3545; color: white; border: none;">로그아웃</button>
         </div>
     </header>
     <main>
         <aside class="sidebar">
             <h2>Projects</h2>
             <div id="project-list">
-                <button id="deselect-project-button" style="display: block; width: 100%; padding: 10px; margin-bottom: 8px; border: 1px solid #28a745; background-color: #f8f9fa; text-align: left; cursor: pointer; border-radius: 5px; font-size: 0.9em; color: #28a745;">
+                <button id="deselect-project-button"
+                    style="display: block; width: 100%; padding: 10px; margin-bottom: 8px; border: 1px solid #28a745; background-color: #f8f9fa; text-align: left; cursor: pointer; border-radius: 5px; font-size: 0.9em; color: #28a745;">
                     📁 BASE_DIR에서 실행
                 </button>
             </div>
             <div id="current-selection">
                 Selected Project: <strong id="selected-project-name">None (BASE_DIR에서 실행)</strong>
             </div>
-            <div id="project-server-controls" style="margin-top: 15px; display: none;">
-                <button id="restart-project-server-button" class="chat-action-button" style="width: 100%; margin-top: 10px; padding: 8px; font-size: 0.9em;">프로젝트 서버 재시작</button>
-                <div id="project-server-status" style="margin-top: 10px; padding: 8px; background-color: #f8f9fa; border-radius: 5px; font-size: 0.85em; color: #666;"></div>
-            </div>
             <div class="cli-selector">
                 <h2>CLI Tool</h2>
-                <label><input type="radio" name="cli" value="gemini" checked> Gemini</label>
-                <label><input type="radio" name="cli" value="claude"> Claude</label>
-                <label><input type="radio" name="cli" value="echo"> Echo (for Testing)</label>
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <label><input type="radio" name="cli" value="gemini" checked> Gemini</label>
+                    <label><input type="radio" name="cli" value="claude"> Claude</label>
+                    <label><input type="radio" name="cli" value="echo"> Echo</label>
+                </div>
+
+                <div id="gemini-model-selector" style="margin-top: 10px;">
+                    <label for="gemini-model"
+                        style="display: block; margin-bottom: 5px; font-size: 0.9em; color: #666;">Gemini Model:</label>
+                    <select id="gemini-model"
+                        style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ddd; font-size: 0.9em;">
+                        <option value="gemini-3-flash">Gemini 3 Flash (Default)</option>
+                        <option value="gemini-3-pro">Gemini 3 Pro</option>
+                        <option value="gemini-3-deep-think">Gemini 3 Deep Think</option>
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                        <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Exp</option>
+                    </select>
+                </div>
             </div>
         </aside>
         <div class="chat-container">
             <div class="chat-header">
-                <h2 style="margin: 0;">채팅</h2>
+                <div class="chat-title-container">
+                    <h2 id="chat-title" style="margin: 0;">채팅</h2>
+                    <div id="project-status-badge"></div>
+                </div>
                 <div class="chat-actions">
-                    <button id="new-chat-button" class="chat-action-button primary">새로 채팅하기</button>
-                    <button id="history-button" class="chat-action-button">히스토리</button>
+                    <button id="restart-project-server-button" class="chat-action-button warning"
+                        style="display: none;">🔄 서버 재시작</button>
+                    <button id="new-chat-button" class="chat-action-button primary">➕ 새 채팅</button>
+                    <button id="history-button" class="chat-action-button">📜 히스토리</button>
                 </div>
             </div>
             <div id="chat-log"></div>
@@ -91,8 +590,19 @@
                 <input type="text" id="message-input" placeholder="메시지를 입력하세요..." autocomplete="off">
                 <button type="submit" id="send-button">전송</button>
             </form>
+
+            <nav class="mobile-nav">
+                <div class="nav-item active" id="nav-servers">
+                    <span class="nav-icon">🖥️</span>
+                    <span>서버 목록</span>
+                </div>
+                <div class="nav-item" id="nav-chat">
+                    <span class="nav-icon">💬</span>
+                    <span>채팅</span>
+                </div>
+            </nav>
         </div>
-        
+
         <!-- 히스토리 모달 -->
         <div id="history-modal" class="history-modal">
             <div class="history-content">
@@ -117,6 +627,7 @@
             let selectedProjectId = null;
             let currentSessionId = null; // 현재 채팅 세션 ID
             let isNewChat = true; // 새 채팅인지 여부
+            let currentView = 'servers'; // 'servers' or 'chat'
 
             // --- Core Functions ---
 
@@ -129,12 +640,12 @@
                     }
                     if (!response.ok) throw new Error('Failed to fetch projects');
                     const projects = await response.json();
-                    
+
                     // BASE_DIR 선택 버튼은 유지하고 프로젝트 목록만 업데이트
                     const deselectButton = document.getElementById('deselect-project-button');
                     projectList.innerHTML = '';
                     projectList.appendChild(deselectButton);
-                    
+
                     projects.forEach(project => {
                         const button = document.createElement('button');
                         button.textContent = project.name;
@@ -168,16 +679,18 @@
 
                     selectedProjectId = null;
                     selectedProjectName.textContent = 'None (BASE_DIR에서 실행)';
+                    document.getElementById('chat-title').textContent = 'Remote Chat (BASE_DIR)';
+                    document.getElementById('project-status-badge').innerHTML = '';
 
                     // Update button styles
                     document.querySelectorAll('#project-list button').forEach(btn => {
                         btn.classList.remove('selected');
                     });
                     document.getElementById('deselect-project-button').classList.add('selected');
-                    
+
                     // 프로젝트 서버 컨트롤 숨기기
-                    document.getElementById('project-server-controls').style.display = 'none';
-                    
+                    document.getElementById('restart-project-server-button').style.display = 'none';
+
                     // BASE_DIR 히스토리 로드
                     await fetchHistory(null);
                 } catch (error) {
@@ -201,17 +714,23 @@
 
                     selectedProjectId = projectId;
                     selectedProjectName.textContent = projectId;
+                    document.getElementById('chat-title').textContent = projectId;
 
                     // Update button styles
                     document.querySelectorAll('#project-list button').forEach(btn => {
                         btn.classList.toggle('selected', btn.dataset.projectId === projectId);
                     });
                     document.getElementById('deselect-project-button').classList.remove('selected');
-                    
+
                     // 프로젝트 서버 상태 확인 및 컨트롤 표시
                     await checkProjectServerStatus(projectId);
-                    
+
                     await fetchHistory(projectId);
+
+                    // 모바일에서 프로젝트 선택 시 채팅창으로 이동
+                    if (window.innerWidth <= 768) {
+                        switchView('chat');
+                    }
                 } catch (error) {
                     console.error(error);
                     appendMessage(`Error selecting project ${projectId}.`, 'error');
@@ -220,43 +739,39 @@
 
             // --- Project Server Functions ---
             const checkProjectServerStatus = async (projectId) => {
-                const controls = document.getElementById('project-server-controls');
-                const statusDiv = document.getElementById('project-server-status');
                 const restartButton = document.getElementById('restart-project-server-button');
-                
+                const statusBadge = document.getElementById('project-status-badge');
+
                 try {
                     const response = await fetch(`/api/projects/${projectId}/server/status`);
                     if (response.ok) {
                         const data = await response.json();
-                        
+
                         if (data.has_server) {
-                            controls.style.display = 'block';
-                            
-                            let statusText = '서버 상태: ';
+                            // 사용자가 요청한 대로, 포트 추적 여부와 상관없이 서버가 있으면 재시작 버튼 표시
+                            restartButton.style.display = 'flex';
+
                             if (data.port) {
-                                statusText += `포트 ${data.port} - `;
-                                statusText += data.port_in_use ? '실행 중 ✅' : '중지됨 ❌';
+                                if (data.port_in_use) {
+                                    statusBadge.innerHTML = `<span class="status-badge status-online">ON (${data.port})</span>`;
+                                } else {
+                                    statusBadge.innerHTML = `<span class="status-badge status-offline">OFF (${data.port})</span>`;
+                                }
                             } else {
-                                statusText += '포트 정보 없음';
-                            }
-                            
-                            statusDiv.textContent = statusText;
-                            
-                            // 관리자만 재시작 버튼 표시
-                            if (data.is_admin) {
-                                restartButton.style.display = 'block';
-                            } else {
-                                restartButton.style.display = 'none';
+                                statusBadge.innerHTML = `<span class="status-badge status-offline">포트 미확인</span>`;
                             }
                         } else {
-                            controls.style.display = 'none';
+                            restartButton.style.display = 'none';
+                            statusBadge.innerHTML = '';
                         }
                     } else {
-                        controls.style.display = 'none';
+                        restartButton.style.display = 'none';
+                        statusBadge.innerHTML = '';
                     }
                 } catch (error) {
                     console.error('Project server status check error:', error);
-                    controls.style.display = 'none';
+                    restartButton.style.display = 'none';
+                    statusBadge.innerHTML = '';
                 }
             };
 
@@ -265,23 +780,23 @@
                     alert('먼저 프로젝트를 선택해주세요.');
                     return;
                 }
-                
+
                 if (!confirm(`프로젝트 '${selectedProjectId}'의 서버를 재시작하시겠습니까?`)) {
                     return;
                 }
-                
+
                 const restartButton = document.getElementById('restart-project-server-button');
                 restartButton.disabled = true;
                 restartButton.textContent = '재시작 중...';
-                
+
                 try {
                     const response = await fetch(`/api/projects/${selectedProjectId}/server/restart`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' }
                     });
-                    
+
                     const data = await response.json();
-                    
+
                     if (response.ok && data.success) {
                         alert(data.message + '\n' + (data.warning || ''));
                         // 몇 초 후 상태 재확인
@@ -296,7 +811,7 @@
                     alert('서버 재시작 중 오류가 발생했습니다.');
                 } finally {
                     restartButton.disabled = false;
-                    restartButton.textContent = '프로젝트 서버 재시작';
+                    restartButton.textContent = '🔄 서버 재시작';
                 }
             };
 
@@ -314,7 +829,7 @@
                     }
                     if (!response.ok) throw new Error('Failed to fetch history');
                     const history = await response.json();
-                    
+
                     if (history.length > 0) {
                         history.forEach(item => {
                             appendMessage(item.user_message, 'user');
@@ -334,6 +849,7 @@
                 event.preventDefault();
                 const message = messageInput.value.trim();
                 const selectedCli = document.querySelector('input[name="cli"]:checked')?.value;
+                const geminiModel = document.getElementById('gemini-model').value;
 
                 if (!selectedCli) {
                     alert('CLI 도구를 선택해주세요.');
@@ -350,12 +866,17 @@
                         cli: selectedCli,
                         message: message
                     };
-                    
+
+                    // Gemini 모델 정보 추가
+                    if (selectedCli === 'gemini') {
+                        requestBody.model = geminiModel;
+                    }
+
                     // 프로젝트가 선택되어 있으면 추가 (없으면 BASE_DIR에서 실행)
                     if (selectedProjectId) {
                         requestBody.projectId = selectedProjectId;
                     }
-                    
+
                     // 새 채팅이면 sessionId를 null로, 아니면 현재 sessionId 사용
                     if (isNewChat) {
                         requestBody.newSession = true;
@@ -380,9 +901,9 @@
                     if (!response.ok) {
                         throw new Error(data.error || '서버 오류가 발생했습니다.');
                     }
-                    
+
                     appendMessage(data.assistant_message, 'assistant');
-                    
+
                     // 세션 ID 업데이트
                     if (data.sessionId) {
                         currentSessionId = data.sessionId;
@@ -401,16 +922,38 @@
 
             const appendMessage = (text, type) => {
                 const messageDiv = document.createElement('div');
-                messageDiv.textContent = text;
+
                 if (type === 'user') {
+                    messageDiv.textContent = text;
                     messageDiv.className = 'message user-message';
                 } else if (type === 'assistant') {
                     messageDiv.className = 'message assistant-message';
+
+                    // Markdown Parsing
+                    let htmlContent = marked.parse(text);
+
+                    // Button Detection: [Button Text] -> <button>
+                    // Only detect buttons that are not inside code blocks (simplified approach)
+                    htmlContent = htmlContent.replace(/\[([^\]]+)\]/g, (match, p1) => {
+                        // If it looks like a link [text](url), don't convert to button
+                        if (match.includes('](')) return match;
+                        return `<button class="cli-button" onclick="window.sendCliCommand('${p1.replace(/'/g, "\\'")}')">${p1}</button>`;
+                    });
+
+                    messageDiv.innerHTML = htmlContent;
                 } else { // 'error'
+                    messageDiv.textContent = text;
                     messageDiv.className = 'message error-message';
                 }
+
                 chatLog.appendChild(messageDiv);
                 chatLog.scrollTop = chatLog.scrollHeight;
+            };
+
+            // 버튼 클릭 시 명령어를 전송하는 전역 함수
+            window.sendCliCommand = (command) => {
+                messageInput.value = command;
+                chatForm.dispatchEvent(new Event('submit'));
             };
 
             // --- New Chat Function ---
@@ -427,13 +970,13 @@
             const showHistory = async () => {
                 // 프로젝트가 선택되지 않았으면 "__root__" 사용 (BASE_DIR)
                 const projectIdForHistory = selectedProjectId || "__root__";
-                
+
                 const modal = document.getElementById('history-modal');
                 const historyList = document.getElementById('history-list');
-                
+
                 modal.classList.add('active');
                 historyList.innerHTML = '<div style="text-align: center; padding: 20px;">로딩 중...</div>';
-                
+
                 try {
                     const response = await fetch(`/api/history/sessions?projectId=${projectIdForHistory}`);
                     if (response.status === 401 || response.status === 403) {
@@ -441,33 +984,33 @@
                         return;
                     }
                     if (!response.ok) throw new Error('히스토리를 불러올 수 없습니다.');
-                    
+
                     const sessions = await response.json();
-                    
+
                     if (sessions.length === 0) {
                         historyList.innerHTML = '<div class="empty-history">저장된 대화 기록이 없습니다.</div>';
                         return;
                     }
-                    
+
                     historyList.innerHTML = '';
                     sessions.forEach(session => {
                         const item = document.createElement('div');
                         item.className = 'history-item';
                         item.dataset.sessionId = session.sessionId;
-                        
+
                         const preview = session.firstMessage || '대화 내용 없음';
                         const time = new Date(session.timestamp).toLocaleString('ko-KR');
-                        
+
                         item.innerHTML = `
                             <div class="history-item-header">세션 ${session.sessionId}</div>
                             <div class="history-item-preview">${preview}</div>
                             <div class="history-item-time">${time}</div>
                         `;
-                        
+
                         item.addEventListener('click', () => {
                             loadHistorySession(session.sessionId);
                         });
-                        
+
                         historyList.appendChild(item);
                     });
                 } catch (error) {
@@ -479,12 +1022,12 @@
             const loadHistorySession = async (sessionId) => {
                 // 프로젝트가 선택되지 않았으면 "__root__" 사용
                 const projectIdForHistory = selectedProjectId || "__root__";
-                
+
                 currentSessionId = sessionId;
                 isNewChat = false;
-                
+
                 await fetchHistory(projectIdForHistory, sessionId);
-                
+
                 // 모달 닫기
                 document.getElementById('history-modal').classList.remove('active');
             };
@@ -498,19 +1041,19 @@
                 if (!confirm('서버를 재시작하시겠습니까? 재시작 중에는 일시적으로 접속이 불가능합니다.')) {
                     return;
                 }
-                
+
                 const restartButton = document.getElementById('restart-server-button');
                 restartButton.disabled = true;
                 restartButton.textContent = '재시작 중...';
-                
+
                 try {
                     const response = await fetch('/api/server/restart', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' }
                     });
-                    
+
                     const data = await response.json();
-                    
+
                     if (response.ok && data.success) {
                         alert(data.message + '\n' + (data.warning || ''));
                         // 몇 초 후 페이지 새로고침
@@ -545,6 +1088,38 @@
                 }
             };
 
+            // --- View Switching ---
+            const switchView = (view) => {
+                const sidebar = document.querySelector('.sidebar');
+                const navServers = document.getElementById('nav-servers');
+                const navChat = document.getElementById('nav-chat');
+                const chatContainer = document.querySelector('.chat-container');
+
+                currentView = view;
+
+                if (view === 'servers') {
+                    sidebar.classList.add('active');
+                    if (chatContainer) chatContainer.classList.remove('active');
+                    if (navServers) navServers.classList.add('active');
+                    if (navChat) navChat.classList.remove('active');
+                } else {
+                    sidebar.classList.remove('active');
+                    if (chatContainer) chatContainer.classList.add('active');
+                    if (navServers) navServers.classList.remove('active');
+                    if (navChat) navChat.classList.add('active');
+                }
+            };
+
+            // --- Initial Responsive Setup ---
+            const initResponsive = () => {
+                if (window.innerWidth <= 768) {
+                    switchView('servers'); // Mobile default to server list
+                } else {
+                    document.querySelector('.sidebar').classList.add('active');
+                    document.querySelector('.chat-container').classList.add('active');
+                }
+            };
+
             // --- Logout Function ---
             const handleLogout = async () => {
                 try {
@@ -570,10 +1145,31 @@
             document.getElementById('new-chat-button').addEventListener('click', startNewChat);
             document.getElementById('history-button').addEventListener('click', showHistory);
             document.getElementById('history-close').addEventListener('click', closeHistoryModal);
-            
+
+            document.getElementById('nav-servers').addEventListener('click', () => switchView('servers'));
+            document.getElementById('nav-chat').addEventListener('click', () => switchView('chat'));
+
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 768) {
+                    document.querySelector('.sidebar').classList.add('active');
+                    document.querySelector('.chat-container').classList.add('active');
+                } else {
+                    switchView(currentView); // Maintain current view on resize if mobile
+                }
+            });
+
+            // CLI 변경 시 모델 선택기 표시/숨김
+            document.querySelectorAll('input[name="cli"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    const modelSelector = document.getElementById('gemini-model-selector');
+                    modelSelector.style.display = e.target.value === 'gemini' ? 'block' : 'none';
+                });
+            });
+
             // --- Initial Load ---
             checkAdminStatus();
-            
+            initResponsive();
+
             // 모달 외부 클릭 시 닫기
             document.getElementById('history-modal').addEventListener('click', (e) => {
                 if (e.target.id === 'history-modal') {
@@ -588,4 +1184,5 @@
         });
     </script>
 </body>
+
 </html>

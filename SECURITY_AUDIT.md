@@ -201,3 +201,4 @@ app.secret_key = os.getenv('SECRET_KEY', os.urandom(24).hex())
 **마지막 업데이트**: 2024년
 **다음 감사 예정일**: 6개월 후 또는 주요 변경사항 발생 시
 
+
