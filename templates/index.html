@@ -52,14 +52,24 @@
         }
 
         .sidebar {
-            width: 300px;
+            width: 25%;
+            min-width: 250px;
+            max-width: 400px;
             background-color: #fdfdfd;
             border-right: 1px solid #ddd;
             padding: 20px;
             overflow-y: auto;
-            transition: transform 0.3s ease;
+            transition: all 0.3s ease;
             min-height: 0;
             /* Flexbox scroll fix */
+        }
+
+        .sidebar.collapsed {
+            width: 0;
+            min-width: 0;
+            padding: 0;
+            border-right: none;
+            overflow: hidden;
         }
 
         .chat-container {
@@ -323,6 +333,38 @@
             cursor: not-allowed;
         }
 
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            padding: 5px 10px;
+            color: #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+
+        .sidebar-toggle:hover {
+            color: #007bff;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-left: 5px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .status-badge:hover {
+            opacity: 0.8;
+        }
+
         .mobile-nav {
             display: none;
             background: #fff;
@@ -356,24 +398,30 @@
                 left: 0;
                 top: 0;
                 bottom: 0;
-                width: 100%;
-                z-index: 50;
-                border-right: none;
+                width: 80%;
+                /* 모바일에서는 80% 정도 차지 */
+                max-width: none;
+                z-index: 150;
+                border-right: 1px solid #ddd;
                 transform: translateX(-100%);
                 background: #fff;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
             }
 
             .sidebar.active {
                 transform: translateX(0);
             }
 
-            .chat-container {
-                width: 100%;
-                display: none;
+            .sidebar.collapsed {
+                transform: translateX(-100%);
+                width: 80%;
+                padding: 20px;
             }
 
-            .chat-container.active {
+            .chat-container {
+                width: 100%;
                 display: flex;
+                /* 모바일에서도 기본적으로 표시 */
             }
 
             .mobile-nav {
@@ -529,7 +577,10 @@
 
 <body>
     <header>
-        <h1>Remote Chat CLI</h1>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <button id="sidebar-toggle" class="sidebar-toggle" title="사이드바 토글">☰</button>
+            <h1>Remote Chat CLI</h1>
+        </div>
         <div style="display: flex; gap: 10px;">
             <button id="restart-server-button" class="chat-action-button warning" style="display: none;">⚙️ 서버
                 재시작</button>
@@ -748,17 +799,14 @@
                         const data = await response.json();
 
                         if (data.has_server) {
-                            // 사용자가 요청한 대로, 포트 추적 여부와 상관없이 서버가 있으면 재시작 버튼 표시
                             restartButton.style.display = 'flex';
 
                             if (data.port) {
-                                if (data.port_in_use) {
-                                    statusBadge.innerHTML = `<span class="status-badge status-online">ON (${data.port})</span>`;
-                                } else {
-                                    statusBadge.innerHTML = `<span class="status-badge status-offline">OFF (${data.port})</span>`;
-                                }
+                                const statusClass = data.port_in_use ? 'status-online' : 'status-offline';
+                                const statusText = data.port_in_use ? 'ON' : 'OFF';
+                                statusBadge.innerHTML = `<span class="status-badge ${statusClass}" onclick="openProjectPage(${data.port})" title="클릭하여 페이지 열기">${statusText} (${data.port})</span>`;
                             } else {
-                                statusBadge.innerHTML = `<span class="status-badge status-offline">포트 미확인</span>`;
+                                statusBadge.innerHTML = `<span class="status-badge status-offline" onclick="promptSetPort('${projectId}')" title="클릭하여 포트 설정">포트 미확인</span>`;
                             }
                         } else {
                             restartButton.style.display = 'none';
@@ -774,6 +822,44 @@
                     statusBadge.innerHTML = '';
                 }
             };
+
+            window.openProjectPage = (port) => {
+                window.open(`minces.iptime.org:${port}`, '_blank');
+            };
+
+            window.promptSetPort = async (projectId) => {
+                const port = prompt('포트 번호를 입력해주세요:', '');
+                if (port && !isNaN(port)) {
+                    try {
+                        const response = await fetch(`/api/projects/${projectId}/port`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ port: parseInt(port) })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            alert(data.message);
+                            checkProjectServerStatus(projectId);
+                        } else {
+                            alert(data.error || '포트 설정에 실패했습니다.');
+                        }
+                    } catch (error) {
+                        console.error('Set port error:', error);
+                        alert('포트 설정 중 오류가 발생했습니다.');
+                    }
+                }
+            };
+
+            // 사이드바 토글 기능
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            sidebarToggle.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    sidebar.classList.toggle('active');
+                } else {
+                    sidebar.classList.toggle('collapsed');
+                }
+            });
 
             const handleRestartProjectServer = async () => {
                 if (!selectedProjectId) {
