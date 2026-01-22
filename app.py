@@ -14,6 +14,7 @@ import time
 import re
 from authlib.integrations.flask_client import OAuth
 import requests
+import sys
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -312,17 +313,19 @@ def find_command(command_name):
     """
     # First, try shutil.which() which checks PATH
     command_path = shutil.which(command_name)
+    
+    # On Windows, prioritize .cmd, .bat, .exe over .ps1 to avoid execution policy issues
+    if os.name == 'nt':
+        for ext in ['.cmd', '.bat', '.exe']:
+            p = shutil.which(command_name + ext)
+            if p:
+                return p
+    
     if command_path:
         return command_path
     
-    # On Windows, also check for .cmd and .bat extensions
+    # Check common npm global installation paths on Windows
     if os.name == 'nt':
-        for ext in ['.cmd', '.bat', '.exe']:
-            command_path = shutil.which(command_name + ext)
-            if command_path:
-                return command_path
-        
-        # Check common npm global installation paths on Windows
         npm_paths = [
             os.path.join(os.environ.get('APPDATA', ''), 'npm', command_name + '.cmd'),
             os.path.join(os.environ.get('LOCALAPPDATA', ''), 'npm', command_name + '.cmd'),
@@ -800,11 +803,27 @@ def handle_query():
         
         # Build the command with the full path
         if cli_tool == 'gemini':
-            # Example for Gemini: gemini --model gemini-1.5-flash prompt "your message"
-            command = [command_path]
+            # 커스텀 gemini_tool.py 사용 (CLI의 내부 에이전트 간섭 방지)
+            python_exe = sys.executable or "python"
+            wrapper_script = os.path.join(BASE_DIR, "gemini_tool.py")
+            
+            # AI에게 도구 사용법을 알려주는 시스템 지침
+            system_instruction = (
+                "You are a helpful AI assistant. To create files or run commands, you MUST use these formats:\n\n"
+                "WRITE_FILE: filename\n"
+                "content\n"
+                "END_WRITE_FILE\n\n"
+                "RUN_COMMAND: command\n\n"
+                "Do NOT use markdown code blocks for these formats. Respond immediately with the format."
+            )
+            full_prompt = f"{system_instruction}\n\nUser Message: {message}"
+            
+            command = [python_exe, wrapper_script, full_prompt]
             if model:
                 command.extend(["--model", model])
-            command.extend(["prompt", message])
+            
+            # 디버깅을 위해 실행되는 명령어 출력
+            print(f"Executing Custom Gemini Tool: {' '.join(command)}")
         elif cli_tool == 'claude':
             # Example for Claude: claude prompt "your message"
             command = [command_path, "prompt", message]
@@ -928,6 +947,77 @@ def get_history_sessions():
     
     conn.close()
     return jsonify(session_list)
+@app.route('/api/files/write', methods=['POST'])
+@login_required
+def api_write_file():
+    """파일을 생성하거나 내용을 씁니다."""
+    data = request.json
+    project_id = data.get('projectId')
+    filename = data.get('filename')
+    content = data.get('content')
+    
+    if not filename:
+        return jsonify({"error": "파일명이 필요합니다."}), 400
+    
+    # 프로젝트 경로 확인
+    if not project_id or project_id == "__root__":
+        project_path = BASE_DIR
+    else:
+        project_path = get_project_path(project_id)
+        if not project_path:
+            return jsonify({"error": "유효하지 않은 프로젝트입니다."}), 400
+            
+    # 보안 체크: 파일명이 프로젝트 디렉토리를 벗어나지 않도록 함
+    file_path = os.path.abspath(os.path.join(project_path, filename))
+    if not file_path.startswith(os.path.abspath(project_path)):
+        return jsonify({"error": "허용되지 않은 파일 경로입니다."}), 403
+        
+    try:
+        # 디렉토리가 없으면 생성
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content or "")
+        return jsonify({"success": True, "message": f"파일 '{filename}'이(가) 성공적으로 저장되었습니다."})
+    except Exception as e:
+        return jsonify({"error": f"파일 저장 중 오류 발생: {str(e)}"}), 500
+
+@app.route('/api/shell/execute', methods=['POST'])
+@admin_required
+def api_execute_shell():
+    """셸 명령어를 실행합니다 (관리자 전용)."""
+    data = request.json
+    project_id = data.get('projectId')
+    command = data.get('command')
+    
+    if not command:
+        return jsonify({"error": "명령어가 필요합니다."}), 400
+        
+    # 프로젝트 경로 확인
+    if not project_id or project_id == "__root__":
+        project_path = BASE_DIR
+    else:
+        project_path = get_project_path(project_id)
+        if not project_path:
+            return jsonify({"error": "유효하지 않은 프로젝트입니다."}), 400
+            
+    try:
+        # 명령어 실행
+        result = subprocess.run(
+            command,
+            cwd=project_path,
+            shell=True,
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        return jsonify({
+            "success": True,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode
+        })
+    except Exception as e:
+        return jsonify({"error": f"명령어 실행 중 오류 발생: {str(e)}"}), 500
 
 
 # --- Frontend Routes ---

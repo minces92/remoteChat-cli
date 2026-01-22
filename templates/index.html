@@ -572,6 +572,60 @@
             background-color: #fff5f5;
             color: #c53030;
         }
+
+        .agent-action {
+            margin-top: 10px;
+            padding: 15px;
+            background-color: #f0f7ff;
+            border: 1px dashed #007bff;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+
+        .agent-action p {
+            margin: 0 0 10px 0;
+        }
+
+        .agent-action code {
+            display: block;
+            background: #e9ecef;
+            padding: 5px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+
+        /* Loading Spinner */
+        .loading-message {
+            align-self: flex-start;
+            background-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            color: #666;
+            font-style: italic;
+            font-size: 0.9em;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 123, 255, 0.2);
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 </head>
 
@@ -613,12 +667,11 @@
                         style="display: block; margin-bottom: 5px; font-size: 0.9em; color: #666;">Gemini Model:</label>
                     <select id="gemini-model"
                         style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ddd; font-size: 0.9em;">
-                        <option value="gemini-3-flash">Gemini 3 Flash (Default)</option>
-                        <option value="gemini-3-pro">Gemini 3 Pro</option>
-                        <option value="gemini-3-deep-think">Gemini 3 Deep Think</option>
-                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                        <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Exp</option>
+                        <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (Default)</option>
+                        <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
                     </select>
                 </div>
             </div>
@@ -931,6 +984,20 @@
                 }
             };
 
+            const showLoading = () => {
+                const loadingDiv = document.createElement('div');
+                loadingDiv.id = 'ai-loading';
+                loadingDiv.className = 'loading-message';
+                loadingDiv.innerHTML = '<div class="spinner"></div> AI가 생각 중입니다...';
+                chatLog.appendChild(loadingDiv);
+                chatLog.scrollTop = chatLog.scrollHeight;
+            };
+
+            const hideLoading = () => {
+                const loadingDiv = document.getElementById('ai-loading');
+                if (loadingDiv) loadingDiv.remove();
+            };
+
             const handleFormSubmit = async (event) => {
                 event.preventDefault();
                 const message = messageInput.value.trim();
@@ -946,6 +1013,7 @@
                 appendMessage(message, 'user');
                 messageInput.value = '';
                 sendButton.disabled = true;
+                showLoading();
 
                 try {
                     const requestBody = {
@@ -977,6 +1045,8 @@
                         body: JSON.stringify(requestBody)
                     });
 
+                    hideLoading();
+
                     if (response.status === 401 || response.status === 403) {
                         window.location.href = '/login';
                         return;
@@ -996,6 +1066,7 @@
                     }
 
                 } catch (error) {
+                    hideLoading();
                     console.error(error);
                     appendMessage(`오류: ${error.message}`, 'error');
                 } finally {
@@ -1019,11 +1090,29 @@
                     let htmlContent = marked.parse(text);
 
                     // Button Detection: [Button Text] -> <button>
-                    // Only detect buttons that are not inside code blocks (simplified approach)
                     htmlContent = htmlContent.replace(/\[([^\]]+)\]/g, (match, p1) => {
-                        // If it looks like a link [text](url), don't convert to button
                         if (match.includes('](')) return match;
                         return `<button class="cli-button" onclick="window.sendCliCommand('${p1.replace(/'/g, "\\'")}')">${p1}</button>`;
+                    });
+
+                    // Agentic Action Detection: 
+                    // 1. WRITE_FILE: filename\ncontent\nEND_WRITE_FILE
+                    const writeFileRegex = /WRITE_FILE:\s*([^\n]+)\n([\s\S]*?)\nEND_WRITE_FILE/g;
+                    htmlContent = htmlContent.replace(writeFileRegex, (match, filename, content) => {
+                        const escapedContent = btoa(unescape(encodeURIComponent(content))); // Base64 encode to avoid issues
+                        return `<div class="agent-action">
+                            <p>📄 <strong>파일 생성 요청:</strong> <code>${filename}</code></p>
+                            <button class="chat-action-button primary" onclick="window.executeWriteFile('${filename}', '${escapedContent}')">파일 생성 실행</button>
+                        </div>`;
+                    });
+
+                    // 2. RUN_COMMAND: command
+                    const runCommandRegex = /RUN_COMMAND:\s*([^\n<]+)/g;
+                    htmlContent = htmlContent.replace(runCommandRegex, (match, command) => {
+                        return `<div class="agent-action">
+                            <p>💻 <strong>명령어 실행 요청:</strong> <code>${command}</code></p>
+                            <button class="chat-action-button warning" onclick="window.executeShellCommand('${command.trim().replace(/'/g, "\\'")}')">명령어 실행</button>
+                        </div>`;
                     });
 
                     messageDiv.innerHTML = htmlContent;
@@ -1034,6 +1123,58 @@
 
                 chatLog.appendChild(messageDiv);
                 chatLog.scrollTop = chatLog.scrollHeight;
+            };
+
+            // --- Agentic Action Execution Functions ---
+            window.executeWriteFile = async (filename, base64Content) => {
+                const content = decodeURIComponent(escape(atob(base64Content)));
+                if (!confirm(`'${filename}' 파일을 생성하시겠습니까?`)) return;
+
+                try {
+                    const response = await fetch('/api/files/write', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            projectId: selectedProjectId,
+                            filename: filename,
+                            content: content
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        alert(data.message);
+                    } else {
+                        alert('오류: ' + data.error);
+                    }
+                } catch (error) {
+                    console.error('Write file error:', error);
+                    alert('파일 저장 중 오류가 발생했습니다.');
+                }
+            };
+
+            window.executeShellCommand = async (command) => {
+                if (!confirm(`다음 명령어를 실행하시겠습니까?\n\n${command}`)) return;
+
+                try {
+                    const response = await fetch('/api/shell/execute', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            projectId: selectedProjectId,
+                            command: command
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        const resultMsg = `명령어 실행 결과 (코드 ${data.returncode}):\n\nSTDOUT:\n${data.stdout}\n\nSTDERR:\n${data.stderr}`;
+                        appendMessage(resultMsg, 'assistant');
+                    } else {
+                        alert('오류: ' + data.error);
+                    }
+                } catch (error) {
+                    console.error('Execute command error:', error);
+                    alert('명령어 실행 중 오류가 발생했습니다.');
+                }
             };
 
             // 버튼 클릭 시 명령어를 전송하는 전역 함수
